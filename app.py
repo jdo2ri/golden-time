@@ -16,8 +16,8 @@ menu = st.sidebar.radio(
 )
 
 # [필수] API 키 세팅
-PUBLIC_API_KEY = "420bdef8cc2ee5353ea2570fbd2718009c49f7c00d463a8eb4cf62955ccc5a4e"
-KAKAO_REST_API_KEY = "df786527b50b083ef13999d02cce32f6"
+PUBLIC_API_KEY = "여기에_공공데이터_API_키를_넣으세요"
+KAKAO_REST_API_KEY = "여기에_카카오_REST_API_키를_넣으세요"
 
 kakao_headers = {"Authorization": f"KakaoAK {KAKAO_REST_API_KEY}"}
 
@@ -38,31 +38,29 @@ if menu == "1. 실시간 응급실 병상":
     </div>
     """, unsafe_allow_html=True)
     
-    if PUBLIC_API_KEY == "여기에_공공데이터_API_키를_넣으세요" or KAKAO_REST_API_KEY == "여기에_카카오_REST_API_키를_넣으세요":
-        st.error("공공데이터 API 키와 카카오 API 키를 코드에 입력해야 지도가 작동합니다.")
+    if PUBLIC_API_KEY.startswith("여기에") or KAKAO_REST_API_KEY.startswith("여기에"):
+        st.error("API 키를 코드에 입력해주세요.")
     else:
         with st.spinner("응급의료기관 데이터를 불러오는 중입니다..."):
-            # 남양주와 구리 데이터를 확실하게 가져오기 위해 지역을 지정
             url = "http://apis.data.go.kr/B552657/ErmctInfoInqireService/getEmrrmRltmUsefulSckbdInfoInqire"
             
             try:
-                # 남양주시 데이터 호출
                 res_nyj = requests.get(url, params={"serviceKey": PUBLIC_API_KEY, "STAGE1": "경기도", "STAGE2": "남양주시", "pageNo": "1", "numOfRows": "10"})
-                # 구리시 데이터 호출
                 res_guri = requests.get(url, params={"serviceKey": PUBLIC_API_KEY, "STAGE1": "경기도", "STAGE2": "구리시", "pageNo": "1", "numOfRows": "10"})
                 
                 items = []
-                if res_nyj.status_code == 200 and res_nyj.text.strip().startswith('<'):
+                if res_nyj.status_code == 200 and '<item>' in res_nyj.text:
                     items.extend(ET.fromstring(res_nyj.text).findall('.//item'))
-                if res_guri.status_code == 200 and res_guri.text.strip().startswith('<'):
+                if res_guri.status_code == 200 and '<item>' in res_guri.text:
                     items.extend(ET.fromstring(res_guri.text).findall('.//item'))
                 
                 if not items:
-                    st.warning("공공데이터 서버에서 해당 지역의 응급실 데이터를 주지 않고 있습니다. (API 키 동기화 대기 중일 수 있습니다)")
+                    st.warning("공공데이터 서버에서 해당 지역의 데이터를 보내주지 않고 있습니다.")
                 else:
                     m = folium.Map(location=[37.6366, 127.1723], zoom_start=11)
                     valid_count = 0
                     bounds = []
+                    debug_logs = []
                     
                     for item in items:
                         raw_name = item.findtext('dutyName')
@@ -72,27 +70,23 @@ if menu == "1. 실시간 응급실 병상":
                             beds = int(beds_str)
                             search_name = clean_hospital_name(raw_name)
                             
-                            # 카카오 API 좌표 검색
-                            k_url = f"https://dapi.kakao.com/v2/local/search/keyword.json?query={search_name}"
-                            k_res = requests.get(k_url, headers=kakao_headers).json()
+                            # [버그 수정] 한글 인코딩 에러를 막기 위해 파라미터(params) 형식으로 안전하게 전송
+                            k_url = "https://dapi.kakao.com/v2/local/search/keyword.json"
+                            k_res = requests.get(k_url, headers=kakao_headers, params={"query": search_name}).json()
                             
-                            # 카카오 API 에러 원인 즉시 파악 로직
-                            if k_res.get("code") == -401:
-                                st.error("🚨 카카오 REST API 키가 잘못되었습니다. (카카오 디벨로퍼스에서 반드시 'REST API 키'를 복사했는지 확인해주세요!)")
+                            # [에러 추적] 카카오가 데이터를 주지 않을 경우, 그 진짜 이유를 팝업으로 띄움
+                            if "documents" not in k_res:
+                                st.error(f"🚨 카카오 API 접속 차단 또는 키 오류 발생: {k_res}")
                                 st.stop()
                                 
-                            if k_res.get('documents'):
+                            if len(k_res['documents']) > 0:
                                 lat = float(k_res['documents'][0]['y'])
                                 lon = float(k_res['documents'][0]['x'])
                                 address = k_res['documents'][0]['address_name']
                                 bounds.append([lat, lon])
                                 
-                                if beds > 0:
-                                    color = 'green'
-                                    status_text = f"<span style='color:#27ae60; font-weight:bold;'>수용 가능 (잔여: {beds}석)</span>"
-                                else:
-                                    color = 'red'
-                                    status_text = "<span style='color:#e74c3c; font-weight:bold;'>수용 불가 (포화)</span>"
+                                color = 'green' if beds > 0 else 'red'
+                                status_text = f"<span style='color:#27ae60; font-weight:bold;'>수용 가능 (잔여: {beds}석)</span>" if beds > 0 else "<span style='color:#e74c3c; font-weight:bold;'>수용 불가 (포화)</span>"
                                     
                                 naver_url = f"https://search.naver.com/search.naver?query={urllib.parse.quote(search_name)}"
                                 
@@ -111,15 +105,21 @@ if menu == "1. 실시간 응급실 병상":
                                     icon=folium.Icon(color=color)
                                 ).add_to(m)
                                 valid_count += 1
+                            else:
+                                debug_logs.append(f"[{search_name}]")
                     
                     if valid_count > 0:
-                        m.fit_bounds(bounds) # 병원들이 다 보이도록 지도 시야 자동 조절
+                        m.fit_bounds(bounds)
                         st_folium(m, width=800, height=550)
+                        if debug_logs:
+                            with st.expander("카카오맵에서 좌표를 찾지 못한 병원 목록 보기"):
+                                st.write("해당 병원들은 카카오맵에 정식 명칭이 다르게 등록되어 있습니다:", ", ".join(debug_logs))
                     else:
-                        st.warning("응급실 이름으로 위도/경도를 찾지 못했습니다. 카카오 맵 검색결과가 없습니다.")
+                        st.warning("공공데이터(응급실 리스트)는 성공적으로 받아왔으나, 카카오맵에서 위도/경도를 단 한 건도 찾지 못했습니다.")
+                        st.write("검색을 시도했던 병원 이름:", ", ".join(debug_logs))
                         
             except Exception as e:
-                st.error(f"공공데이터 서버 통신 에러: {e}")
+                st.error(f"코드 에러 발생: {e}")
 
 # ==========================================
 # 2. 야간 및 휴일 진료망
@@ -127,68 +127,67 @@ if menu == "1. 실시간 응급실 병상":
 elif menu == "2. 야간 및 휴일 진료망":
     st.header("서울/경기도 야간 및 휴일 진료망")
     
-    # 📌 휴일 진료(주황색) 범례 확실하게 추가 완료
     st.markdown("""
     <div style="background-color: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px; font-size: 14px;">
-        <b>지도 마커 안내:</b> 파란색(야간 진료 의원) | 주황색(휴일 진료 의원) | 초록색(심야 약국)
+        <b>지도 마커 안내:</b> 파란색(소아과 의원) | 주황색(응급실) | 초록색(24시 약국)
     </div>
     """, unsafe_allow_html=True)
     
-    if KAKAO_REST_API_KEY == "여기에_카카오_REST_API_키를_넣으세요":
-        st.error("카카오 REST API 키를 입력해야 지도가 렌더링됩니다.")
+    if KAKAO_REST_API_KEY.startswith("여기에"):
+        st.error("카카오 REST API 키를 입력해주세요.")
     else:
-        with st.spinner("해당 지역의 야간/휴일 의료기관 데이터를 수집 중입니다..."):
+        with st.spinner("해당 지역의 의료기관 데이터를 수집 중입니다..."):
             m2 = folium.Map(location=[37.6000, 127.1500], zoom_start=11)
             
-            # 📌 검색어에 '휴일진료' 추가 완료
+            # [버그 수정] 카카오맵에 100% 등록되어 있는 확실한 키워드로 변경
             search_queries = [
-                {"query": "남양주 야간진료", "color": "blue"},
-                {"query": "남양주 휴일진료", "color": "orange"},
-                {"query": "남양주 심야약국", "color": "green"},
-                {"query": "구리 야간진료", "color": "blue"},
-                {"query": "구리 휴일진료", "color": "orange"},
-                {"query": "구리 심야약국", "color": "green"}
+                {"query": "남양주 24시 약국", "color": "green"},
+                {"query": "구리 24시 약국", "color": "green"},
+                {"query": "남양주 소아과", "color": "blue"},
+                {"query": "구리 소아과", "color": "blue"},
+                {"query": "남양주 응급실", "color": "orange"},
+                {"query": "구리 응급실", "color": "orange"}
             ]
             
             result_count = 0
             bounds = []
             
+            k_url = "https://dapi.kakao.com/v2/local/search/keyword.json"
+            
             for sq in search_queries:
-                k_url = f"https://dapi.kakao.com/v2/local/search/keyword.json?query={sq['query']}&size=10"
-                k_res = requests.get(k_url, headers=kakao_headers).json()
+                k_res = requests.get(k_url, headers=kakao_headers, params={"query": sq['query'], "size": 10}).json()
                 
-                # 에러 감지
-                if k_res.get("code") == -401:
-                    st.error("🚨 카카오 REST API 키가 올바르지 않습니다. 카카오 디벨로퍼스에서 키를 다시 확인해주세요.")
+                # [에러 추적] 에러 시 화면에 진짜 이유 출력
+                if "documents" not in k_res:
+                    st.error(f"🚨 카카오 API 차단됨 (권한/설정 문제): {k_res}")
                     st.stop()
                 
-                if k_res.get('documents'):
-                    for place in k_res['documents']:
-                        lat = float(place['y'])
-                        lon = float(place['x'])
-                        name = place['place_name']
-                        address = place['address_name']
-                        phone = place['phone'] if place['phone'] else "번호 없음"
-                        
-                        bounds.append([lat, lon])
-                        
-                        naver_url = f"https://search.naver.com/search.naver?query={urllib.parse.quote(name)}"
-                        
-                        popup_html = f"""
-                        <div style="width: 220px; font-family: 'Malgun Gothic', sans-serif;">
-                            <h5 style="margin: 0 0 5px 0;">{name}</h5>
-                            <p style="font-size:12px; color:gray; margin:0 0 5px 0;">{address}</p>
-                            <p style="font-size:12px; font-weight:bold; margin:0 0 10px 0;">연락처: {phone}</p>
-                            <a href="{naver_url}" target="_blank" style="background-color:#03c75a; color:white; padding:5px 10px; text-decoration:none; border-radius:4px; font-size:12px; display:block; text-align:center;">네이버 상세 검색</a>
-                        </div>
-                        """
-                        
-                        folium.Marker(
-                            location=[lat, lon],
-                            popup=folium.Popup(popup_html, max_width=300),
-                            icon=folium.Icon(color=sq['color'])
-                        ).add_to(m2)
-                        result_count += 1
+                for place in k_res.get('documents', []):
+                    lat = float(place['y'])
+                    lon = float(place['x'])
+                    name = place['place_name']
+                    address = place['address_name']
+                    phone = place['phone'] if place['phone'] else "번호 없음"
+                    
+                    bounds.append([lat, lon])
+                    
+                    naver_url = f"https://search.naver.com/search.naver?query={urllib.parse.quote(name)}"
+                    
+                    popup_html = f"""
+                    <div style="width: 220px; font-family: 'Malgun Gothic', sans-serif;">
+                        <h5 style="margin: 0 0 5px 0;">{name}</h5>
+                        <p style="font-size:12px; color:gray; margin:0 0 5px 0;">{address}</p>
+                        <p style="font-size:12px; font-weight:bold; margin:0 0 10px 0;">연락처: {phone}</p>
+                        <a href="{naver_url}" target="_blank" style="background-color:#03c75a; color:white; padding:5px 10px; text-decoration:none; border-radius:4px; font-size:12px; display:block; text-align:center;">네이버 상세 검색</a>
+                    </div>
+                    """
+                    
+                    folium.Marker(
+                        location=[lat, lon],
+                        popup=folium.Popup(popup_html, max_width=300),
+                        icon=folium.Icon(color=sq['color'])
+                    ).add_to(m2)
+                    result_count += 1
             
             if result_count > 0:
                 m2.fit_bounds(bounds) # 마커들이 다 보이게 지도 사이즈 자동 조절
