@@ -21,7 +21,7 @@ def clean_hospital_name(name):
     return name.strip()
 
 st.title("서울/경기도 응급 의료 통합 지도") 
-if st.button(" 새로고"):
+if st.button(" 새로고침"):
     st.cache_data.clear()
     st.rerun()
 st.markdown("""
