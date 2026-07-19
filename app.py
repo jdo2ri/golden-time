@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import folium
-import streamlit.components.v1 as components  # 속도 개선을 위한 새 모듈
+import streamlit.components.v1 as components
 import xml.etree.ElementTree as ET
 import urllib.parse
 import re
@@ -14,6 +14,7 @@ st.set_page_config(page_title="서울/경기도 응급 의료 통합 시스템",
 PUBLIC_API_KEY = "420bdef8cc2ee5353ea2570fbd2718009c49f7c00d463a8eb4cf62955ccc5a4e"
 KAKAO_REST_API_KEY = "df786527b50b083ef13999d02cce32f6"
 
+
 def clean_hospital_name(name):
     name = re.sub(r'\(.*?\)', '', name)
     for word in ['의료법인', '재단법인', '사단법인', '사회복지법인', '학교법인']:
@@ -23,13 +24,11 @@ def clean_hospital_name(name):
 # ==========================================
 # 통합 지도 UI 구성
 # ==========================================
-# 이모지 삭제 완료
 st.title("서울/경기도 응급 의료 통합 지도") 
 
-# 불필요한 텍스트 삭제 완료
+# '📍 지도 마커 범례' 텍스트 삭제, 설명만 유지
 st.markdown("""
 <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 15px; font-size: 15px;">
-    <b>📍 지도 마커 범례</b><br>
     🟢 <b>수용 가능 응급실</b> (잔여 병상 1석 이상) &nbsp;|&nbsp; 🔴 <b>수용 불가 응급실</b> (병상 포화, 0석)<br>
     🟠 <b>야간 및 휴일 진료</b> (경증 환자용) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp; 🟣 <b>심야 약국</b>
 </div>
@@ -88,7 +87,7 @@ def load_all_data(pub_key, kakao_key):
     k_url = "https://dapi.kakao.com/v2/local/search/keyword.json"
     
     for q in queries:
-        for page_num in range(1, 3): # 속도 최적화를 위해 페이지 탐색 최적화
+        for page_num in range(1, 3): 
             try:
                 k_res = requests.get(k_url, headers=kakao_headers, params={"query": q["q"], "size": 15, "page": page_num}, timeout=5).json()
                 for place in k_res.get('documents', []):
@@ -109,7 +108,7 @@ def load_all_data(pub_key, kakao_key):
     return markers, bounds
 
 # ==========================================
-# 지도 렌더링 (HTML 렌더링 방식으로 속도 100배 향상)
+# 지도 렌더링 (HTML 렌더링 방식으로 속도 향상)
 # ==========================================
 if PUBLIC_API_KEY.startswith("여기에") or KAKAO_REST_API_KEY.startswith("여기에"):
     st.error("API 키 두 개를 코드에 입력해주세요.")
@@ -144,7 +143,7 @@ else:
             if bounds:
                 m.fit_bounds(bounds)
             
-            st.success(f"총 {len(markers)}개의 데이터가 로딩되었습니다. (이제 지도를 움직여도 멈추지 않습니다.)")
+            # 불필요한 문구 삭제
+            st.success(f"총 {len(markers)}개의 데이터가 로딩되었습니다.")
             
-            # st_folium을 버리고 순수 HTML로 지도를 박아버리는 방식 적용
             components.html(m._repr_html_(), height=750)
