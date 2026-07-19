@@ -19,35 +19,46 @@ menu = st.sidebar.radio(
 if menu == "실시간 병상 대시보드":
     st.header("남양주시 권역 실시간 응급 병상 현황")
     
-    # [주의] 본인의 API 키를 발급받아 아래에 넣어야 실제 데이터가 호출됩니다.
+    # [주의] 본인의 Decoding API 키를 아래에 넣으세요.
     API_KEY = "420bdef8cc2ee5353ea2570fbd2718009c49f7c00d463a8eb4cf62955ccc5a4e"
     
     if API_KEY == "여기에_본인의_API_키를_입력하세요":
-        st.warning("API 키가 없습니다. 공공데이터포털(data.go.kr)에서 '응급의료기관 실시간 가용병상정보' API 키를 발급받아 코드에 입력해주세요.")
+        st.warning("API 키가 없습니다. 공공데이터포털(data.go.kr)에서 키를 발급받아 입력해주세요.")
     else:
         url = "http://apis.data.go.kr/B552657/ErmctInfoInqireService/getEmrrmRltmUsefulSckbdInfoInqire"
         params = {"serviceKey": API_KEY, "STAGE1": "경기도", "STAGE2": "남양주시", "pageNo": "1", "numOfRows": "10"}
         
         try:
             response = requests.get(url, params=params)
-            root = ET.fromstring(response.text)
             
-            hospital_list = []
-            for item in root.findall('.//item'):
-                name = item.findtext('dutyName')
-                beds = item.findtext('hvec') # 응급실 일반병상
-                
-                if name and beds:
-                    hospital_list.append({"의료기관명": name, "실시간 잔여 병상": int(beds)})
-            
-            if hospital_list:
-                df = pd.DataFrame(hospital_list)
-                df['현재 상태'] = df['실시간 잔여 병상'].apply(lambda x: "수용 가능" if x > 0 else "포화 (수용 불가)")
-                st.dataframe(df, use_container_width=True)
+            # 서버가 에러(일반 텍스트/HTML)를 반환할 때의 방어 코드
+            if not response.text.strip().startswith('<'):
+                st.warning("⏳ 공공데이터포털 서버에 API 키가 등록(동기화)되는 중입니다. 발급 후 1~2시간 정도 기다린 후 새로고침 해주세요!")
             else:
-                st.error("데이터를 불러오지 못했습니다.")
+                root = ET.fromstring(response.text)
+                
+                # XML 응답은 왔으나 서비스 키 미등록 에러인 경우 방어
+                result_code = root.findtext('.//resultCode')
+                if result_code and result_code != "00":
+                    result_msg = root.findtext('.//resultMsg')
+                    st.warning(f"⏳ API 키 동기화 대기 중이거나 서버 오류입니다. (보통 발급 후 1~2시간 소요)\n- 사유: {result_msg}")
+                else:
+                    hospital_list = []
+                    for item in root.findall('.//item'):
+                        name = item.findtext('dutyName')
+                        beds = item.findtext('hvec') # 응급실 일반병상
+                        
+                        if name and beds:
+                            hospital_list.append({"의료기관명": name, "실시간 잔여 병상": int(beds)})
+                    
+                    if hospital_list:
+                        df = pd.DataFrame(hospital_list)
+                        df['현재 상태'] = df['실시간 잔여 병상'].apply(lambda x: "수용 가능" if x > 0 else "포화 (수용 불가)")
+                        st.dataframe(df, use_container_width=True)
+                    else:
+                        st.error("현재 조회된 데이터가 없습니다.")
         except Exception as e:
-            st.error(f"API 호출 오류: {e}")
+            st.error(f"API 호출 중 오류 발생: {e}")
 
 # ==========================================
 # 2. 최적 이송 경로 시뮬레이션
@@ -64,7 +75,7 @@ elif menu == "최적 이송 경로 시뮬레이션":
     st_folium(m, width=800, height=400)
 
 # ==========================================
-# 3. 야간/휴일 진료 맵 (요청하신 동적 업데이트 & 이모지 맵)
+# 3. 야간/휴일 진료 맵
 # ==========================================
 else:
     st.header("남양주시 경증 환자 진료 네트워크 맵")
