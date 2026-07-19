@@ -9,8 +9,8 @@ import re
 
 st.set_page_config(page_title="서울/경기도 응급 의료 통합 시스템", layout="wide")
 
-PUBLIC_API_KEY = "여기에_공공데이터_API_키를_넣으세요"
-KAKAO_REST_API_KEY = "여기에_카카오_REST_API_키를_넣으세요"
+PUBLIC_API_KEY = "420bdef8cc2ee5353ea2570fbd2718009c49f7c00d463a8eb4cf62955ccc5a4e"
+KAKAO_REST_API_KEY = "df786527b50b083ef13999d02cce32f6"
 
 def clean_hospital_name(name):
     name = re.sub(r'\(.*?\)', '', name)
