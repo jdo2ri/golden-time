@@ -17,7 +17,7 @@ menu = st.sidebar.radio(
 
 # [필수] API 키 세팅
 PUBLIC_API_KEY = "420bdef8cc2ee5353ea2570fbd2718009c49f7c00d463a8eb4cf62955ccc5a4e"
-KAKAO_REST_API_KEY = "c96834f4061643fe5ae6b48c3f3efb69"
+KAKAO_REST_API_KEY = "df786527b50b083ef13999d02cce32f6"
 
 kakao_headers = {"Authorization": f"KakaoAK {KAKAO_REST_API_KEY}"}
 
