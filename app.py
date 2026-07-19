@@ -21,6 +21,9 @@ def clean_hospital_name(name):
     return name.strip()
 
 st.title("서울/경기도 응급 의료 통합 지도") 
+if st.button(" 새로고"):
+    st.cache_data.clear()
+    st.rerun()
 st.markdown("""
 <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 15px; font-size: 15px;">
     🟢 수용 가능 응급실 (잔여 병상 1석 이상) | 🔴 수용 불가 응급실 (병상 포화, 0석)<br>
@@ -43,6 +46,7 @@ def get_all_data(pub_key, kakao_key):
                 for item in ET.fromstring(res.text).findall('.//item'):
                     name = clean_hospital_name(item.findtext('dutyName'))
                     beds = int(item.findtext('hvec', '0'))
+                    beds = max(0, beds)
                     
                     k_res = requests.get("https://dapi.kakao.com/v2/local/search/keyword.json", headers=headers, params={"query": name}).json()
                     if k_res.get('documents'):
